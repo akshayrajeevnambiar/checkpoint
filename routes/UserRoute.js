@@ -7,7 +7,7 @@ const { body, validationResult } = require("express-validator");
 const userModel = require("../models/User");
 const { SALT_ROUNDS, TOKEN_EXPIRY } = require("../config/constants");
 
-const signUpValidator = [
+const registerValidator = [
   body("username", "Username is required").notEmpty(),
   body("password", "Password should be a minimum of 6 characters long")
     .notEmpty()
@@ -15,8 +15,15 @@ const signUpValidator = [
   body("email").notEmpty().isEmail(),
 ];
 
+const loginValidator = [
+  body("email", "Email is required").notEmpty().isEmail(),
+  body("password", "Password should be a minimum of 6 characters long")
+    .notEmpty()
+    .isLength({ min: 6 }),
+];
+
 // creating a @POST route for user registeration
-router.post("/register", signUpValidator, async (req, res) => {
+router.post("/register", registerValidator, async (req, res) => {
   const signupErrors = validationResult(req);
 
   if (!signupErrors.isEmpty()) {
@@ -64,6 +71,56 @@ router.post("/register", signUpValidator, async (req, res) => {
     res.status(200).json({
       token: token,
       success: "new user has been registered",
+    });
+  } catch (err) {
+    res.status(402).json({
+      error: err.message,
+    });
+  }
+});
+
+// create a route for the users to login
+router.post("/login", loginValidator, async (req, res) => {
+  const loginErrors = validationResult(req);
+
+  if (!loginErrors.isEmpty()) {
+    res.status(422).json({
+      error: loginErrors.array(),
+    });
+  }
+  try {
+    // try to extract the credentials from the body
+    const { email, password } = req.body;
+
+    const user = await userModel.findOne({ email });
+
+    if (!user) {
+      res.status(402).json({
+        error: "no user found",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      res.status(400).json({
+        error: "Invalid credentials",
+      });
+    }
+    // JWT for faster authentication
+    const payload = {
+      user: {
+        id: user.id,
+      },
+    };
+
+    const token = jwt.sign(payload, process.env.JWT_SECRET_KEY, {
+      expiresIn: TOKEN_EXPIRY,
+    });
+
+    res.status(200).json({
+      token: token,
+      success: `Welcome back ${user.username}`,
     });
   } catch (err) {
     res.status(402).json({
