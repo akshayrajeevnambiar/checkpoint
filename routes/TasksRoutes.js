@@ -5,6 +5,7 @@ const express = require("express");
 const router = express.Router();
 const taskModel = require("../models/Task");
 const authMiddleware = require("../middleware/authMiddleware");
+const { parse } = require("dotenv");
 
 // route responsible for creating a task
 router.post("/", authMiddleware, async (req, res) => {
@@ -27,10 +28,32 @@ router.post("/", authMiddleware, async (req, res) => {
 module.exports = router;
 
 // route responsible for fetching all tasks
+// @GET
+// @route /api/tasks
+// @access private
 router.get("/", authMiddleware, async (req, res) => {
+  const {
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    orderBy = "desc",
+  } = req.query;
+
   try {
-    const tasks = await taskModel.find({ userId: req.user.id });
-    res.status(200).json(tasks);
+    const tasks = await taskModel
+      .find({ userId: req.user.id })
+      .sort({ [sortBy]: orderBy === "asc" ? 1 : -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    const totalTasks = await taskModel.countDocuments({ userId: req.user.id });
+
+    res.status(200).json({
+      tasks,
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(totalTasks / limit),
+      totalTasks,
+    });
   } catch (error) {
     console.log(error.message);
     res.status(500).json({ error: error.message });
